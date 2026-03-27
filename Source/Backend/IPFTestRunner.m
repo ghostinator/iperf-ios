@@ -1,15 +1,16 @@
 #import "IPFTestRunner.h"
 #import "IPFTestRunnerConfiguration.h"
 
-#import "iperf_api.h"
-#import "iperf.h"
-#import "queue.h"
+#import "../iperf3/iperf_config.h"
+#import "../iperf3/iperf_api.h"
+#import "../iperf3/iperf.h"
+#import "../iperf3/queue.h"
 
 static __unsafe_unretained IPFTestRunner *s_currentTestRunner;
 
 @interface IPFTestRunner ()
 
-- (void)handleStatsCallback:(struct iperf_test *)test;
+- (void)dispatchStatus:(IPFTestRunnerStatus)status;
 
 @end
 
@@ -32,6 +33,10 @@ static IPFTestRunnerErrorState IPFTestRunnerErrorStateFromIPerfError(int error)
     case IEACCESSDENIED:
       return IPFTestRunnerErrorStateServerIsBusy;
 
+    case IESTREAMREAD:
+    case IESTREAMCLOSE:
+      return IPFTestRunnerErrorStateNoError;
+
     default:
       return IPFTestRunnerErrorStateUnknown + error;
   }
@@ -39,8 +44,63 @@ static IPFTestRunnerErrorState IPFTestRunnerErrorStateFromIPerfError(int error)
 
 static void vc_reporter_callback(struct iperf_test *test)
 {
+  struct iperf_stream *stream = NULL;
+  struct iperf_interval_results *interval_results = NULL;
+  iperf_size_t bytes = 0;
+  int total_packets = 0, lost_packets = 0;
+  double avg_jitter = 0.0, lost_percent = 0.0;
+  int stream_count = 0;
+
+  SLIST_FOREACH(stream, &test->streams, streams) {
+    stream_count++;
+    interval_results = TAILQ_LAST(&stream->result->interval_results, irlisthead);
+    if (!interval_results) {
+      continue;
+    }
+    iperf_size_t b = interval_results->bytes_transferred;
+    bytes += b;
+
+    if (test->protocol->id != Ptcp) {
+      total_packets += interval_results->interval_packet_count;
+      lost_packets += interval_results->interval_cnt_error;
+      avg_jitter += interval_results->jitter;
+    }
+  }
+
+  stream = SLIST_FIRST(&test->streams);
+  if (!stream) { return; }
+
+  interval_results = TAILQ_LAST(&stream->result->interval_results, irlisthead);
+  if (!interval_results || interval_results->interval_duration <= 0.0) {
+    return;
+  }
+
+  double bandwidth = (double)bytes / (double)interval_results->interval_duration;
+  if (test->num_streams > 0) {
+    avg_jitter /= test->num_streams;
+  }
+
+  if (total_packets > 0) {
+    lost_percent = 100.0 * lost_packets / total_packets;
+  }
+
+  IPFTestRunnerStatus status;
+  status.errorState = IPFTestRunnerErrorStateNoError;
+  status.running = YES;
+  status.bandwidth = bandwidth * 8 / 1000000;
+  status.jitter = (CGFloat)(avg_jitter * 1000.0);
+  status.packetLoss = (CGFloat)lost_percent;
+
+  if (test->timer) {
+    CGFloat test_duration = (CGFloat)test->timer->usecs / SEC_TO_US;
+    CGFloat test_elapsed = test_duration - (test->timer->time.secs - test->stats_timer->time.secs) - 1.0;
+    status.progress = test_elapsed / test_duration;
+  } else {
+    status.progress = 1.0;
+  }
+
   dispatch_async(dispatch_get_main_queue(), ^{
-    [s_currentTestRunner handleStatsCallback:test];
+    [s_currentTestRunner dispatchStatus:status];
   });
 }
 
@@ -77,6 +137,8 @@ static void vc_reporter_callback(struct iperf_test *test)
   status.bandwidth = 0.0;
   status.running = NO;
   status.progress = 0.0;
+  status.jitter = 0.0;
+  status.packetLoss = 0.0;
   status.errorState = IPFTestRunnerErrorStateNoError;
 
   if (!test) {
@@ -94,6 +156,12 @@ static void vc_reporter_callback(struct iperf_test *test)
   } else {
     iperf_set_test_role(test, 'c');
     iperf_set_test_num_streams(test, (int)configuration.streams);
+
+    if (configuration.useUDP) {
+      set_protocol(test, Pudp);
+      test->settings->blksize = DEFAULT_UDP_BLKSIZE;
+      test->settings->rate = configuration.udpBandwidth;
+    }
 
     if (configuration.type == IPFTestRunnerConfigurationTypeDownload) {
       iperf_set_test_reverse(test, 1);
@@ -152,73 +220,10 @@ static void vc_reporter_callback(struct iperf_test *test)
   }
 }
 
-- (void)handleStatsCallback:(struct iperf_test *)test
+- (void)dispatchStatus:(IPFTestRunnerStatus)status
 {
-  IPFTestRunnerStatus status;
-
-  status.errorState = IPFTestRunnerErrorStateNoError;
-  status.running = YES;
-
-  // See iperf_reporter_callback
-  {
-    extern double timeval_diff(struct timeval * tv0, struct timeval * tv1);
-
-    struct iperf_stream *stream = NULL;
-    struct iperf_interval_results *interval_results = NULL;
-    iperf_size_t bytes = 0;
-    double bandwidth = 0.0;
-    int retransmits = 0;
-    int total_packets = 0, lost_packets = 0;
-    double avg_jitter = 0.0, lost_percent = 0.0;
-
-    SLIST_FOREACH(stream, &test->streams, streams) {
-      interval_results = TAILQ_LAST(&stream->result->interval_results, irlisthead);
-      bytes += interval_results->bytes_transferred;
-
-      if (test->protocol->id == Ptcp) {
-        if (test->mode == SENDER && test->sender_has_retransmits) {
-          retransmits += interval_results->interval_retrans;
-        }
-      } else {
-        total_packets += interval_results->interval_packet_count;
-        lost_packets += interval_results->interval_cnt_error;
-        avg_jitter += interval_results->jitter;
-      }
-    }
-
-    stream = SLIST_FIRST(&test->streams);
-
-    if (stream) {
-      interval_results = TAILQ_LAST(&stream->result->interval_results, irlisthead);
-      bandwidth = (double)bytes / (double)interval_results->interval_duration;
-      avg_jitter /= test->num_streams;
-
-      if (total_packets > 0) {
-        lost_percent = 100.0 * lost_packets / total_packets;
-      } else {
-        lost_percent = 0.0;
-      }
-
-      // NSLog(@"Bandwidth on %d streams: %.2f Mbits/s (retransmits: %d, lost: %.2f%%, jitter: %.0f, interval: %.2fs)", test->num_streams, bandwidth * 8 / 1000000, retransmits, lost_percent, avg_jitter * 1000.0, interval_results->interval_duration);
-      status.bandwidth = bandwidth * 8 / 1000000;
-
-      if (test->timer) {
-        CGFloat test_duration = (CGFloat)test->timer->usecs / SEC_TO_US;
-        CGFloat test_elapsed = 0.0;
-
-        // The timer bumps the duration before calling back, and is always 1 second too late
-        // Remove 1 second to make sure we report accurate progress
-        test_elapsed = test_duration - (test->timer->time.secs - test->stats_timer->time.secs) - 1.0;
-        status.progress = test_elapsed / test_duration;
-        // NSLog(@"Test duration: %.2fs (%d), elapsed: %.2f, progress: %.2f", test_duration, test->duration, test_elapsed, status.progress);
-      } else {
-        status.progress = 1.0;
-      }
-
-      NSAssert([[NSThread currentThread] isMainThread], @"Tests need to run on the main thread");
-      _callback(status);
-    }
-  }
+  NSAssert([[NSThread currentThread] isMainThread], @"Tests need to run on the main thread");
+  _callback(status);
 }
 
 @end

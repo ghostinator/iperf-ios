@@ -34,7 +34,7 @@
 		B6570E212353D5F800A8F791 /* iperf_time.c in Sources */ = {isa = PBXBuildFile; fileRef = B6570E1F2353D5F700A8F791 /* iperf_time.c */; };
 		B6570E222353D5F800A8F791 /* iperf_time.c in Sources */ = {isa = PBXBuildFile; fileRef = B6570E1F2353D5F700A8F791 /* iperf_time.c */; };
 		B692F60E227D907E00BE7313 /* IPFTestRunnerTest.m in Sources */ = {isa = PBXBuildFile; fileRef = B692F5FD227D8F6800BE7313 /* IPFTestRunnerTest.m */; };
-		B6A90E36227D6D3400E3981C /* IPFTestRunnerConfiguration.m in Sources */ = {isa = PBXBuildFile; fileRef = B6A90E34227D6D3400E3981C /* IPFTestRunnerConfiguration.m */; };
+		B6A90E36227D6D3400E3981C /* IPFTestRunnerConfiguration.m in Sources */ = {isa = PBXBuildFile; fileRef = B6A90E34227D6D3400E3981C /* IPFTestRunnerConfiguration.m */; settings = {COMPILER_FLAGS = "-fobjc-arc"; }; };
 		B6C539A52EAD46E90083C2D9 /* iperf_pthread.c in Sources */ = {isa = PBXBuildFile; fileRef = B6C539A42EAD46E90083C2D9 /* iperf_pthread.c */; };
 		B6C539A62EAD46E90083C2D9 /* iperf_pthread.c in Sources */ = {isa = PBXBuildFile; fileRef = B6C539A42EAD46E90083C2D9 /* iperf_pthread.c */; };
 /* End PBXBuildFile section */
@@ -346,8 +346,6 @@
 				TargetAttributes = {
 					2B6855E61DCF72D60009ABFD = {
 						CreatedOnToolsVersion = 8.1;
-						DevelopmentTeam = LW2ABE364X;
-						ProvisioningStyle = Automatic;
 					};
 					B692F603227D907600BE7313 = {
 						CreatedOnToolsVersion = 10.2.1;
@@ -588,16 +586,17 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_USE_OPTIMIZATION_PROFILE = YES;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = LW2ABE364X;
+				DEVELOPMENT_TEAM = YL5WX53BPS;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/Source/iperf3";
 				INFOPLIST_FILE = "$(SRCROOT)/Resources/Info.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.teapotapps.iperf;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ghostinator.iperf;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 			};
@@ -608,16 +607,17 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_USE_OPTIMIZATION_PROFILE = YES;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = LW2ABE364X;
+				DEVELOPMENT_TEAM = YL5WX53BPS;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/Source/iperf3";
 				INFOPLIST_FILE = "$(SRCROOT)/Resources/Info.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.teapotapps.iperf;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ghostinator.iperf;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 			};

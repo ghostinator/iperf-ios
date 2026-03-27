@@ -21,6 +21,18 @@ static int getTestDuration(NSUInteger selectedSegmentIndex)
   }
 }
 
+static NSUInteger getUDPBandwidth(NSUInteger selectedSegmentIndex)
+{
+  switch (selectedSegmentIndex) {
+    case 0: return   1000000;
+    case 1: return   5000000;
+    case 2: return  10000000;
+    case 3: return  50000000;
+    case 4: return 100000000;
+    default: return  1000000;
+  }
+}
+
 @interface IPFTestRunnerViewController ()
 
 @property (strong, nonatomic) IPFTestRunner *testRunner;
@@ -32,6 +44,12 @@ static int getTestDuration(NSUInteger selectedSegmentIndex)
   NSUInteger _averageBandwidthCount;
   CGFloat _maxBandwidth;
   CGFloat _minBandwidth;
+  NSMutableArray *_intervalResults;
+  NSString *_testHostname;
+  NSUInteger _testPort;
+  BOOL _testWasUDP;
+  NSUInteger _testDuration;
+  NSUInteger _intervalIndex;
 }
 
 - (instancetype)initWithNibName:(NSString *)nibNameOrNil bundle:(NSBundle *)nibBundleOrNil
@@ -113,19 +131,36 @@ static int getTestDuration(NSUInteger selectedSegmentIndex)
   }
 }
 
+- (IBAction)udpSwitchChanged:(id)sender
+{
+  BOOL isOn = self.udpSwitch.on;
+  self.udpBandwidthLabel.hidden = !isOn;
+  self.udpBandwidthSelector.hidden = !isOn;
+}
+
 - (void)startTest
 {
+  NSUInteger udpBandwidth = getUDPBandwidth(self.udpBandwidthSelector.selectedSegmentIndex);
   IPFTestRunnerConfiguration *configuration = [[IPFTestRunnerConfiguration alloc] initWithHostname:self.addressTextField.text
                                                                                               port:[self.portTextField.text intValue]
                                                                                           duration:getTestDuration(self.testDurationSlider.selectedSegmentIndex)
                                                                                            streams:[self.streamsSlider selectedSegmentIndex] + 1
-                                                                                              type:[self.transmitModeSlider selectedSegmentIndex]];
+                                                                                              type:[self.transmitModeSlider selectedSegmentIndex]
+                                                                                           useUDP:self.udpSwitch.on
+                                                                                     udpBandwidth:udpBandwidth];
   IPFTestRunner *testRunner = [[IPFTestRunner alloc] initWithConfiguration:configuration];
   UIApplication *application = [UIApplication sharedApplication];
   __block UIBackgroundTaskIdentifier backgroundTask = [application beginBackgroundTaskWithExpirationHandler:^{
     [application endBackgroundTask:backgroundTask];
     backgroundTask = UIBackgroundTaskInvalid;
   }];
+
+  _testHostname = self.addressTextField.text;
+  _testPort = [self.portTextField.text integerValue];
+  _testWasUDP = self.udpSwitch.on;
+  _testDuration = getTestDuration(self.testDurationSlider.selectedSegmentIndex);
+  _intervalResults = [NSMutableArray array];
+  _intervalIndex = 0;
 
   self.testRunner = testRunner;
   [self showStartButton:NO];
@@ -134,8 +169,14 @@ static int getTestDuration(NSUInteger selectedSegmentIndex)
   self.transmitModeSlider.enabled = NO;
   self.streamsSlider.enabled = NO;
   self.testDurationSlider.enabled = NO;
+  self.udpSwitch.enabled = NO;
+  self.udpBandwidthSelector.enabled = NO;
   self.bandwidthLabel.text = @"...";
   self.averageBandwidthLabel.text = @"";
+  self.jitterLabel.text = @"";
+  self.jitterLabel.hidden = YES;
+  self.packetLossLabel.text = @"";
+  self.packetLossLabel.hidden = YES;
   self.progressView.progress = 0.0;
   self.progressView.hidden = YES;
   [application setNetworkActivityIndicatorVisible:YES];
@@ -143,8 +184,6 @@ static int getTestDuration(NSUInteger selectedSegmentIndex)
   _averageBandwidthCount = 0;
   _maxBandwidth = CGFLOAT_MIN;
   _minBandwidth = CGFLOAT_MAX;
-
-  // NSLog(@"Starting the test");
 
   [testRunner startTest:^(IPFTestRunnerStatus status) {
     switch (status.errorState) {
@@ -175,32 +214,31 @@ static int getTestDuration(NSUInteger selectedSegmentIndex)
       self.transmitModeSlider.enabled = YES;
       self.streamsSlider.enabled = YES;
       self.testDurationSlider.enabled = YES;
+      self.udpSwitch.enabled = YES;
+      self.udpBandwidthSelector.enabled = YES;
       self.progressView.hidden = YES;
       self.testRunner = nil;
       [application setNetworkActivityIndicatorVisible:NO];
       [application endBackgroundTask:backgroundTask];
-
-      // NSLog(@"Not running");
 
       if (status.errorState == IPFTestRunnerErrorStateNoError || status.errorState == IPFTestRunnerErrorStateServerIsBusy) {
         if (self->_averageBandwidthTotal) {
           self.bandwidthLabel.text = [NSString stringWithFormat:@"%.0f Mbits/s", self->_averageBandwidthTotal / (CGFloat)self->_averageBandwidthCount];
           self.averageBandwidthLabel.text = [NSString stringWithFormat:@"min: %.0f max: %.0f", self->_minBandwidth, self->_maxBandwidth];
           self.progressView.hidden = NO;
+          [self showExportButton];
         } else {
           self.bandwidthLabel.text = @"";
         }
 
-        // Only persist settings if the test is successful
         [self saveTestSettings];
       }
     } else {
       CGFloat bandwidth = status.bandwidth;
 
-      // NSLog(@"Bandwidth: %.2f, progress: %.2f", status.bandwidth, status.progress);
-
-      self->_averageBandwidthTotal += status.bandwidth;
+      self->_averageBandwidthTotal += bandwidth;
       self->_averageBandwidthCount++;
+      self->_intervalIndex++;
       self.progressView.hidden = NO;
 
       if (bandwidth < self->_minBandwidth) {
@@ -211,11 +249,74 @@ static int getTestDuration(NSUInteger selectedSegmentIndex)
         self->_maxBandwidth = bandwidth;
       }
 
+      CGFloat startSec = (CGFloat)(self->_intervalIndex - 1);
+      CGFloat endSec = (CGFloat)self->_intervalIndex;
+      NSString *intervalLine;
+      if (configuration.useUDP) {
+        intervalLine = [NSString stringWithFormat:@"[  4] %5.2f-%5.2f sec  %6.2f MBytes  %6.2f Mbits/sec  %6.3f ms  %ld/%ld (%.2f%%)",
+                        startSec, endSec,
+                        bandwidth / 8.0,
+                        bandwidth,
+                        status.jitter,
+                        (long)0, (long)0,
+                        status.packetLoss];
+      } else {
+        intervalLine = [NSString stringWithFormat:@"[  4] %5.2f-%5.2f sec  %6.2f MBytes  %6.2f Mbits/sec",
+                        startSec, endSec,
+                        bandwidth / 8.0,
+                        bandwidth];
+      }
+      [self->_intervalResults addObject:intervalLine];
+
       self.bandwidthLabel.text = [NSString stringWithFormat:@"%.0f Mbits/s", status.bandwidth];
       self.averageBandwidthLabel.text = [NSString stringWithFormat:@"avg: %.0f min: %.0f max: %.0f", self->_averageBandwidthTotal / (CGFloat)self->_averageBandwidthCount, self->_minBandwidth, self->_maxBandwidth];
+
+      if (configuration.useUDP) {
+        self.jitterLabel.hidden = NO;
+        self.packetLossLabel.hidden = NO;
+        self.jitterLabel.text = [NSString stringWithFormat:@"jitter: %.2f ms", status.jitter];
+        self.packetLossLabel.text = [NSString stringWithFormat:@"packet loss: %.1f%%", status.packetLoss];
+      }
+
       [self.progressView setProgress:status.progress animated:YES];
     }
   }];
+}
+
+- (void)showExportButton
+{
+  UIBarButtonItem *exportItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAction
+                                                                              target:self
+                                                                              action:@selector(exportResults)];
+  self.navigationItem.leftBarButtonItem = exportItem;
+}
+
+- (void)exportResults
+{
+  NSMutableString *output = [NSMutableString string];
+  NSString *protocol = _testWasUDP ? @"UDP" : @"TCP";
+  CGFloat avgBandwidth = _averageBandwidthCount > 0 ? _averageBandwidthTotal / (CGFloat)_averageBandwidthCount : 0;
+
+  [output appendFormat:@"------------------------------------------------------------\n"];
+  [output appendFormat:@"Client connecting to %@, %@ port %lu\n", _testHostname, protocol, (unsigned long)_testPort];
+  [output appendFormat:@"------------------------------------------------------------\n"];
+
+  if (_testWasUDP) {
+    [output appendString:@"[ ID] Interval           Transfer    Bandwidth       Jitter    Lost/Total (%%)\n"];
+  } else {
+    [output appendString:@"[ ID] Interval           Transfer    Bandwidth\n"];
+  }
+
+  for (NSString *line in _intervalResults) {
+    [output appendFormat:@"%@\n", line];
+  }
+
+  [output appendFormat:@"------------------------------------------------------------\n"];
+  [output appendFormat:@"[  4]  0.00-%5.2f sec  avg %.2f Mbits/sec  min %.0f  max %.0f Mbits/sec\n",
+   (CGFloat)_testDuration, avgBandwidth, _minBandwidth, _maxBandwidth];
+
+  UIActivityViewController *activityVC = [[UIActivityViewController alloc] initWithActivityItems:@[output] applicationActivities:nil];
+  [self presentViewController:activityVC animated:YES completion:nil];
 }
 
 - (void)showAlert:(NSString *)alertText

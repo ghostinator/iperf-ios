@@ -7,11 +7,17 @@
 @property (strong, nonatomic) IBOutlet UISegmentedControl *transmitModeSlider;
 @property (strong, nonatomic) IBOutlet UISegmentedControl *streamsSlider;
 @property (strong, nonatomic) IBOutlet UISegmentedControl *testDurationSlider;
+@property (strong, nonatomic) IBOutlet UISwitch *udpSwitch;
+@property (strong, nonatomic) IBOutlet UISegmentedControl *udpBandwidthSelector;
+@property (strong, nonatomic) IBOutlet UILabel *udpBandwidthLabel;
 @property (strong, nonatomic) IBOutlet UILabel *bandwidthLabel;
 @property (strong, nonatomic) IBOutlet UILabel *averageBandwidthLabel;
+@property (strong, nonatomic) IBOutlet UILabel *jitterLabel;
+@property (strong, nonatomic) IBOutlet UILabel *packetLossLabel;
 @property (strong, nonatomic) IBOutlet UIProgressView *progressView;
 
 - (IBAction)showHelp;
 - (IBAction)startStopTest;
+- (IBAction)udpSwitchChanged:(id)sender;
 
 @end

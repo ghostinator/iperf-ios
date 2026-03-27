@@ -13,8 +13,9 @@
 @property (nonatomic, readonly) NSUInteger duration;
 @property (nonatomic, readonly) NSUInteger streams;
 @property (nonatomic, readonly) IPFTestRunnerConfigurationType type;
+@property (nonatomic, readonly) BOOL useUDP;
+@property (nonatomic, readonly) NSUInteger udpBandwidth;
 
-- (instancetype)initWithHostname:(NSString *)hostname port:(NSUInteger)port duration:(NSUInteger)duration streams:(NSUInteger)streams type:(IPFTestRunnerConfigurationType)type;
+- (instancetype)initWithHostname:(NSString *)hostname port:(NSUInteger)port duration:(NSUInteger)duration streams:(NSUInteger)streams type:(IPFTestRunnerConfigurationType)type useUDP:(BOOL)useUDP udpBandwidth:(NSUInteger)udpBandwidth;
 
 @end
-

@@ -15,6 +15,8 @@ typedef struct {
   BOOL running;
   CGFloat progress;
   CGFloat bandwidth;
+  CGFloat jitter;
+  CGFloat packetLoss;
   IPFTestRunnerErrorState errorState;
 } IPFTestRunnerStatus;
 

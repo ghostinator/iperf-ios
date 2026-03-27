@@ -11,7 +11,7 @@
 
 @implementation IPFTestRunnerConfiguration
 
-- (instancetype)initWithHostname:(NSString *)hostname port:(NSUInteger)port duration:(NSUInteger)duration streams:(NSUInteger)streams type:(IPFTestRunnerConfigurationType)type
+- (instancetype)initWithHostname:(NSString *)hostname port:(NSUInteger)port duration:(NSUInteger)duration streams:(NSUInteger)streams type:(IPFTestRunnerConfigurationType)type useUDP:(BOOL)useUDP udpBandwidth:(NSUInteger)udpBandwidth
 {
   if ((self = [super init])) {
     _hostname = [hostname copy];
@@ -19,6 +19,8 @@
     _duration = duration;
     _streams = streams;
     _type = type;
+    _useUDP = useUDP;
+    _udpBandwidth = udpBandwidth;
   }
 
   return self;
@@ -31,14 +33,14 @@
 
 - (NSString *)description
 {
-  return [NSString stringWithFormat:@"%@ - \n\t hostname: %@; \n\t port: %tu; \n\t duration: %tu; \n\t streams: %tu; \n\t type: %tu; \n", [super description], _hostname, _port, _duration, _streams, _type];
+  return [NSString stringWithFormat:@"%@ - \n\t hostname: %@; \n\t port: %tu; \n\t duration: %tu; \n\t streams: %tu; \n\t type: %tu; \n\t useUDP: %d; \n\t udpBandwidth: %tu; \n", [super description], _hostname, _port, _duration, _streams, _type, _useUDP, _udpBandwidth];
 }
 
 - (NSUInteger)hash
 {
-  NSUInteger subhashes[] = {[_hostname hash], _port, _duration, _streams, _type};
+  NSUInteger subhashes[] = {[_hostname hash], _port, _duration, _streams, _type, (NSUInteger)_useUDP, _udpBandwidth};
   NSUInteger result = subhashes[0];
-  for (int ii = 1; ii < 5; ++ii) {
+  for (int ii = 1; ii < 7; ++ii) {
     unsigned long long base = (((unsigned long long)result) << 32 | subhashes[ii]);
     base = (~base) + (base << 18);
     base ^= (base >> 31);
@@ -63,6 +65,8 @@
     _duration == object->_duration &&
     _streams == object->_streams &&
     _type == object->_type &&
+    _useUDP == object->_useUDP &&
+    _udpBandwidth == object->_udpBandwidth &&
     (_hostname == object->_hostname ? YES : [_hostname isEqual:object->_hostname]);
 }
 
