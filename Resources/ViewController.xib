@@ -23,7 +23,6 @@
                 <outlet property="udpBandwidthSelector" destination="uBW-sc-003" id="uBW-sc-004"/>
                 <outlet property="udpSwitch" destination="u1D-sw-iT7" id="u2D-sw-iT8"/>
                 <outlet property="view" destination="Wm7-in-GMe" id="wAp-Y7-IYv"/>
-                <action selector="udpSwitchChanged:" destination="u1D-sw-iT7" id="uBW-ac-005"/>
             </connections>
         </placeholder>
         <placeholder placeholderIdentifier="IBFirstResponder" id="-2" customClass="UIResponder"/>
